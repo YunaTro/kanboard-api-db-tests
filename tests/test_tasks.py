@@ -49,23 +49,23 @@ def test_two_tasks_with_identical_titles_have_different_ids(
 
     first_task_id = call_api(
         api_session,
-        "CreateTask",
+        "createTask",
         {
             "title": task_title,
             "project_id": project_id
         }
     )
-    second_task_id = call_api(
-        api_session,
-        "CreateTask",
-        {
-            "title": task_title,
-            "project_id": project_id
-        }
-    )
-
     assert type(first_task_id) is int and first_task_id > 0, (
         f"Unexpected createTask result: {first_task_id!r}"
+    )
+    
+    second_task_id = call_api(
+        api_session,
+        "createTask",
+        {
+            "title": task_title,
+            "project_id": project_id
+        }
     )
     assert type(second_task_id) is int and second_task_id > 0, (
         f"Unexpected createTask result: {second_task_id!r}"
@@ -77,8 +77,8 @@ def test_two_tasks_with_identical_titles_have_different_ids(
             project_id,
             task_title
         )
-    expected_rows = [
+    expected_rows = sorted([
         (first_task_id, task_title),
-        (second_task_id, task_title)
-    ]
+        (second_task_id, task_title),
+    ])
     assert found_tasks_rows == expected_rows
