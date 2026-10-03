@@ -67,3 +67,16 @@ def find_tasks_by_title(connection, project_id, title):
             (project_id, title)
         )
         return cursor.fetchall()
+
+
+def delete_project_by_id(connection, project_id):
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            DELETE FROM projects
+            WHERE id = %s
+            RETURNING id
+            """,
+            (project_id,),
+        )
+        return cursor.fetchone()

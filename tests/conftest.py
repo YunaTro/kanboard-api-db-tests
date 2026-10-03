@@ -9,6 +9,11 @@ import requests
 from dotenv import load_dotenv
 
 from clients.kanboard_api import call_api
+from db.queries import (
+    delete_project_by_id,
+    find_project_by_id,
+    list_tasks_with_project,
+)
 
 @pytest.fixture(scope="session", autouse=True)
 def load_environment():
@@ -42,7 +47,7 @@ def db_connection(load_environment):
 
 
 @pytest.fixture
-def created_project(api_session):
+def created_project(api_session, db_connection):
     project_name = f"QA DB {uuid4().hex}"
 
     project_id = call_api(
@@ -60,11 +65,25 @@ def created_project(api_session):
             "name": project_name,
         }
     finally:
-        removed = call_api(
-            api_session,
-            "removeProject",
-            {"project_id": project_id},
+        db_connection.rollback()
+        with db_connection:
+            delete_project_by_id(db_connection, project_id)
+        with db_connection:
+            remaining_project = find_project_by_id(
+                db_connection,
+                project_id,
+            )
+
+            with db_connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT id FROM tasks WHERE project_id = %s",
+                    (project_id,),
+                )
+                remaining_tasks = cursor.fetchall()
+
+        assert remaining_project is None, (
+            f"Project {project_id} still exists after DB cleanup"
         )
-        assert removed is True, (
-            f"Could not remove test project {project_id}"
+        assert remaining_tasks == [], (
+            f"Tasks remain for project {project_id}: {remaining_tasks!r}"
         )

@@ -58,7 +58,7 @@ def test_two_tasks_with_identical_titles_have_different_ids(
     assert type(first_task_id) is int and first_task_id > 0, (
         f"Unexpected createTask result: {first_task_id!r}"
     )
-    
+
     second_task_id = call_api(
         api_session,
         "createTask",
