@@ -1,0 +1,4 @@
+services:
+  kanboard:
+    environment:
+      API_AUTHENTICATION_TOKEN: ${API_TOKEN:?API_TOKEN must be set}

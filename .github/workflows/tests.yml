@@ -12,11 +12,25 @@ permissions:
   contents: read
 
 jobs:
-  prepare:
-    name: Prepare Python and collect tests
+  tests:
+    name: Run API tests with PostgreSQL
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
 
+    env:
+      COMPOSE_PROJECT_NAME: kanboard-ci
+      COMPOSE_FILE: compose.yaml:compose.ci.yaml
+
+      DB_HOST: "127.0.0.1"
+      DB_PORT: "5433"
+      DB_NAME: kanboard
+      DB_USER: kanboard
+      DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
+
+      API_URL: http://127.0.0.1:8081/jsonrpc.php
+      API_USERNAME: jsonrpc
+      API_TOKEN: ${{ secrets.CI_API_TOKEN }}
+    
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -32,6 +46,7 @@ jobs:
         run: |
           python --version
           python -m pip --version
+          docker compose version
 
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
@@ -39,5 +54,37 @@ jobs:
       - name: Check installed dependencies
         run: python -m pip check
 
-      - name: Collect tests
-        run: python -m pytest --collect-only -q
+      - name: Check required configuration
+        run: |
+          python - <<'PY'
+          import os
+
+          required = ("DB_PASSWORD", "API_TOKEN")
+          missing = [name for name in required if not os.environ.get(name)]
+
+          if missing:
+              raise SystemExit(
+                  "Missing required configuration: " + ", ".join(missing)
+              )
+
+          print("Required configuration is present")
+          PY
+
+      - name: Start application
+        run: docker compose up -d --wait --wait-timeout 120
+
+      - name: Wait for API readiness
+        run: python scripts/wait_for_api.py
+
+      - name: Run tests
+        run: python -m pytest -v          
+
+      - name: Show service logs on failure
+        if: ${{ failure() }}
+        run: |
+          docker compose ps -a
+          docker compose logs --no-color --tail=100
+
+      - name: Stop application
+        if: ${{ always() }}
+        run: docker compose down --volumes --remove-orphans
