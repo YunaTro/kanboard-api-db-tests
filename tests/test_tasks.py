@@ -1,7 +1,11 @@
+import allure
+
 from clients.kanboard_api import call_api
 from db.queries import find_task_with_project, find_tasks_by_title
 
-
+@allure.feature("Tasks API")
+@allure.story("Task persistence")
+@allure.title("Created task is stored in PostgreSQL")
 def test_created_task_is_saved_in_database(
     api_session,
     db_connection,

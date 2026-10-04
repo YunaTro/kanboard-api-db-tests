@@ -70,6 +70,26 @@ jobs:
           print("Required configuration is present")
           PY
 
+      - name: Set up Java for Allure
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Allure CLI
+        env:
+          ALLURE_VERSION: "2.35.1"
+        run: |
+          curl --fail --silent --show-error --location \
+            "https://github.com/allure-framework/allure2/releases/download/${ALLURE_VERSION}/allure-${ALLURE_VERSION}.tgz" \
+            --output "$RUNNER_TEMP/allure.tgz"
+
+          tar -xzf "$RUNNER_TEMP/allure.tgz" -C "$RUNNER_TEMP"
+
+          echo "$RUNNER_TEMP/allure-${ALLURE_VERSION}/bin" >> "$GITHUB_PATH"
+
+          "$RUNNER_TEMP/allure-${ALLURE_VERSION}/bin/allure" --version
+
       - name: Start application
         run: docker compose up -d --wait --wait-timeout 120
 
@@ -77,7 +97,41 @@ jobs:
         run: python scripts/wait_for_api.py
 
       - name: Run tests
-        run: python -m pytest -v          
+        id: tests
+        run: |
+          python -m pytest -v \
+          --alluredir=allure-results \
+          --clean-alluredir
+
+      - name: Upload Allure results
+        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: allure-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: allure-results/
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Generate Allure report
+        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
+        run: |
+          if ! find allure-results -type f -name '*-result.json' -print -quit 2>/dev/null | grep -q .; then
+            echo "::error::No Allure test results were produced. Check the pytest step."
+            exit 1
+          fi
+
+          allure generate allure-results \
+            --output allure-report \
+            --clean
+
+      - name: Upload Allure report
+        if: ${{ !cancelled() && hashFiles('allure-report/index.html') != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: allure-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: allure-report/
+          retention-days: 14
+          if-no-files-found: error
 
       - name: Show service logs on failure
         if: ${{ failure() }}
