@@ -14,6 +14,7 @@ from db.queries import (
     find_project_by_id,
     list_tasks_with_project,
 )
+from services.tasks_service import TasksService
 
 @pytest.fixture(scope="session", autouse=True)
 def load_environment():
@@ -45,6 +46,9 @@ def db_connection(load_environment):
     ) as connection:
         yield connection
 
+@pytest.fixture
+def task_service(api_session):
+    return TasksService(api_session)
 
 @pytest.fixture
 def created_project(api_session, db_connection):
