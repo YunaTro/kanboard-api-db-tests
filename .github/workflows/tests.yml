@@ -11,11 +11,18 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   tests:
     name: Run API tests with PostgreSQL
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+
+    outputs:
+      pages_ready: ${{ steps.pages_artifact.outcome == 'success' }}
 
     env:
       COMPOSE_PROJECT_NAME: kanboard-ci
@@ -133,6 +140,20 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+      - name: Upload report for GitHub Pages
+        id: pages_artifact
+        if: >-
+          ${{
+            !cancelled() &&
+            github.event_name == 'push' &&
+            github.ref == 'refs/heads/main' &&
+            hashFiles('allure-report/index.html') != ''
+          }}
+        uses: actions/upload-pages-artifact@v4
+        with:
+          name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
+          path: allure-report/
+
       - name: Show service logs on failure
         if: ${{ failure() }}
         run: |
@@ -142,3 +163,37 @@ jobs:
       - name: Stop application
         if: ${{ always() }}
         run: docker compose down --volumes --remove-orphans
+
+  deploy:
+    name: Publish Allure report
+    needs: tests
+
+    if: >-
+      ${{
+        !cancelled() &&
+        github.event_name == 'push' &&
+        github.ref == 'refs/heads/main' &&
+        needs.tests.outputs.pages_ready == 'true'
+      }}
+
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Deploy Allure report
+        id: deployment
+        uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
