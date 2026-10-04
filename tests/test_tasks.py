@@ -38,7 +38,7 @@ def test_created_task_is_saved_in_database(
     )
     assert task_row == (
         task_id,
-        task_title,
+        "wrong",
         project_id,
         created_project["name"],
     )
