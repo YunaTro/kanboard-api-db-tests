@@ -124,3 +124,68 @@ Named volumes retain application and database data between runs.
 - API actions remain in test bodies when they are the behavior under test.
 - Cleanup targets the specific project created for each test.
 - Database checks intentionally depend on the Kanboard schema used by the pinned application version.
+
+## Continuous Integration
+
+[![API and DB checks](https://github.com/YunaTro/kanboard-api-db-tests/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/YunaTro/kanboard-api-db-tests/actions/workflows/tests.yml)
+
+GitHub Actions runs the test suite on pushes to `main` and pull requests targeting `main`.
+
+Each run:
+
+1. Sets up Python and restores the pip dependency cache.
+2. Installs and checks project dependencies.
+3. Starts an isolated Kanboard and PostgreSQL environment with Docker Compose.
+4. Waits for an authenticated API readiness check.
+5. Runs pytest and records Allure results.
+6. Generates and uploads the HTML report.
+7. Prints service logs on failure and tears down the temporary environment.
+
+Test failures keep the workflow failed even when report generation and publication succeed.
+
+### Required Secrets
+
+Configure these repository secrets under **Settings → Secrets and variables → Actions**:
+
+| Secret | Purpose |
+|---|---|
+| `CI_DB_PASSWORD` | Password for the temporary PostgreSQL instance |
+| `CI_API_TOKEN` | Shared API token for the CI Kanboard instance and test client |
+
+The workflow passes these values through environment variables. A `.env` file is not required in CI.
+
+The secret-based workflow is intended for branches within this repository. Pull requests from forks do not normally receive repository secrets.
+
+## Allure Reports
+
+[View the published Allure report](https://YunaTro.github.io/kanboard-api-db-tests/)
+
+The workflow stores raw Allure results and generated HTML reports as separate artifacts with a 14-day retention period.
+
+Reports are generated after test execution, including failed test runs when result files are available. If environment preparation fails before tests start, no test report is published.
+
+For pushes to `main`, a separate deployment job publishes the generated report to GitHub Pages. Pull request runs produce downloadable artifacts without updating the public site.
+
+The Pages site shows the most recently deployed report. If a later run cannot produce or deploy a report, the existing site remains available. Check the Actions run for the current pipeline status.
+
+Allure history is not carried over between runs.
+
+### GitHub Pages Setup
+
+In **Settings → Pages → Build and deployment**, select **GitHub Actions** as the source.
+
+The deployment uses the built-in GitHub Actions authentication mechanism; no personal access token is required.
+
+### Local Report Generation
+
+With the local application running and Allure Report 2 installed:
+
+```bash
+python -m pytest -v --alluredir=allure-results --clean-alluredir
+allure generate allure-results --output allure-report --clean
+allure open allure-report
+```
+
+Java is required for the Allure Report 2 CLI.
+
+Generated results and reports are excluded from version control. Report attachments must not contain credentials or other sensitive data.
