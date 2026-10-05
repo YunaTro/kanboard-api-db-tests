@@ -67,7 +67,7 @@ def test_two_tasks_with_identical_titles_have_different_ids(
         (first_task_id, task_title),
         (second_task_id, task_title),
     ])
-    assert found_tasks_rows != expected_rows
+    assert found_tasks_rows == expected_rows
 
 @allure.feature("Tasks API")
 @allure.story("Renaming task")
