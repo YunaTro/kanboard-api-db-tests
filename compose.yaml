@@ -34,6 +34,40 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    profiles:
+      - tests
+
+    environment:
+      API_URL: http://kanboard/jsonrpc.php
+      API_USERNAME: jsonrpc
+      API_TOKEN: ${API_TOKEN:?API_TOKEN must be set}
+
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kanboard:
+        condition: service_started
+
+    volumes:
+      - ./allure-results:/app/allure-results
+
+    command:
+      - /bin/sh
+      - -c
+      - |
+        python scripts/wait_for_api.py &&
+        exec python -m pytest -v --alluredir=allure-results --clean-alluredir
 
 volumes:
   postgres_data:

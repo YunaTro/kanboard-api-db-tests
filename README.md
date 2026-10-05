@@ -13,7 +13,10 @@ The project verifies that tasks created through the JSON-RPC API are persisted c
 - PostgreSQL 16
 - Kanboard v1.2.45
 - Docker Compose
+- Dockerfile
 - python-dotenv
+- allure
+- GitHub Actions
 
 ## Test Coverage
 
@@ -189,3 +192,58 @@ allure open allure-report
 Java is required for the Allure Report 2 CLI.
 
 Generated results and reports are excluded from version control. Report attachments must not contain credentials or other sensitive data.
+
+## Running Tests with Docker
+
+Docker Compose runs three services:
+
+- `postgres` — the application database.
+- `kanboard` — the application under test.
+- `tests` — Python, project dependencies, and the pytest suite built from the project Dockerfile.
+
+Configure `.env` as described in the setup instructions. For local runs, `API_TOKEN` must match the token accepted by the local Kanboard instance.
+
+Build the test image and run the suite:
+
+```bash
+docker compose build tests
+docker compose up -d postgres kanboard
+docker compose run --rm -T tests
+```
+
+The test container waits for the authenticated API readiness check before starting pytest. It connects to Kanboard and PostgreSQL through the Compose network using service names and internal ports.
+
+Test source files are copied into the image. Rebuild it after changing tests, helpers, dependencies, or the Dockerfile.
+
+The `tests` service uses a Compose profile, so a regular `docker compose up -d` does not start the test suite.
+
+### Test Results
+
+Allure results are written to a bind-mounted `allure-results/` directory and remain available after the test container is removed.
+
+Generate and open the HTML report with a locally installed Allure Report 2 CLI:
+
+```bash
+allure generate allure-results --output allure-report --clean
+allure open allure-report
+```
+
+### Stopping the Environment
+
+```bash
+docker compose down
+```
+
+This preserves the named database volume. Adding `--volumes` also deletes the environment's named volumes and their stored data.
+
+## Containerized CI
+
+GitHub Actions builds the test image, starts a temporary Kanboard and PostgreSQL environment, and runs the suite inside the test container.
+
+Credentials are supplied at runtime through GitHub Secrets. The `.dockerignore` file excludes local environment files, virtual environments, and generated reports from the build context.
+
+Java and the Allure CLI run on the GitHub runner. They generate the HTML report from the results written by the container. Raw results and HTML reports are uploaded as artifacts; reports from pushes to `main` are also published to GitHub Pages.
+
+Test failures keep the workflow failed while allowing available results to be processed. If API readiness fails before pytest starts, no test report is generated.
+
+CI teardown removes the temporary containers and named volumes. Docker build cache is not currently persisted between workflow runs.
