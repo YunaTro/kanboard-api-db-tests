@@ -28,54 +28,33 @@ jobs:
       COMPOSE_PROJECT_NAME: kanboard-ci
       COMPOSE_FILE: compose.yaml:compose.ci.yaml
 
-      DB_HOST: "127.0.0.1"
-      DB_PORT: "5433"
       DB_NAME: kanboard
       DB_USER: kanboard
       DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
 
-      API_URL: http://127.0.0.1:8081/jsonrpc.php
-      API_USERNAME: jsonrpc
       API_TOKEN: ${{ secrets.CI_API_TOKEN }}
     
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: requirements.txt
-        
-      - name: Show tool version
+      - name: Show Docker versions
         run: |
-          python --version
-          python -m pip --version
+          docker --version
           docker compose version
 
-      - name: Install dependencies
-        run: python -m pip install -r requirements.txt
-
-      - name: Check installed dependencies
-        run: python -m pip check
-
       - name: Check required configuration
+        shell: bash
         run: |
-          python - <<'PY'
-          import os
+          if [[ -z "$DB_PASSWORD" || -z "$API_TOKEN" ]]; then
+            echo "::error::CI_DB_PASSWORD and CI_API_TOKEN must be configured"
+            exit 1
+          fi
 
-          required = ("DB_PASSWORD", "API_TOKEN")
-          missing = [name for name in required if not os.environ.get(name)]
+          echo "Required configuration is present"
 
-          if missing:
-              raise SystemExit(
-                  "Missing required configuration: " + ", ".join(missing)
-              )
-
-          print("Required configuration is present")
-          PY
+      - name: Build test image
+        run: docker compose build tests
 
       - name: Set up Java for Allure
         uses: actions/setup-java@v6
@@ -98,20 +77,13 @@ jobs:
           "$RUNNER_TEMP/allure-${ALLURE_VERSION}/bin/allure" --version
 
       - name: Start application
-        run: docker compose up -d --wait --wait-timeout 120
+        run: docker compose up -d --wait --wait-timeout 120 postgres kanboard
 
-      - name: Wait for API readiness
-        run: python scripts/wait_for_api.py
-
-      - name: Run tests
-        id: tests
-        run: |
-          python -m pytest -v \
-          --alluredir=allure-results \
-          --clean-alluredir
+      - name: Run tests in container
+        run: docker compose run --rm -T --no-deps tests
 
       - name: Upload Allure results
-        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
+        if: ${{ !cancelled() && hashFiles('allure-results/**') != '' }}
         uses: actions/upload-artifact@v7
         with:
           name: allure-results-${{ github.run_id }}-${{ github.run_attempt }}
@@ -120,13 +92,8 @@ jobs:
           if-no-files-found: warn
 
       - name: Generate Allure report
-        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
+        if: ${{ !cancelled() && hashFiles('allure-results/*-result.json') != '' }}
         run: |
-          if ! find allure-results -type f -name '*-result.json' -print -quit 2>/dev/null | grep -q .; then
-            echo "::error::No Allure test results were produced. Check the pytest step."
-            exit 1
-          fi
-
           allure generate allure-results \
             --output allure-report \
             --clean
@@ -158,7 +125,7 @@ jobs:
         if: ${{ failure() }}
         run: |
           docker compose ps -a
-          docker compose logs --no-color --tail=100
+          docker compose logs --no-color --tail=100 postgres kanboard
 
       - name: Stop application
         if: ${{ always() }}
