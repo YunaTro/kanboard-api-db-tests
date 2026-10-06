@@ -247,3 +247,27 @@ Java and the Allure CLI run on the GitHub runner. They generate the HTML report 
 Test failures keep the workflow failed while allowing available results to be processed. If API readiness fails before pytest starts, no test report is generated.
 
 CI teardown removes the temporary containers and named volumes. Docker build cache is not currently persisted between workflow runs.
+
+## Unit Tests and Mocking
+
+Unit tests use `pytest-mock` to verify API wrapper and service behavior without running Kanboard or PostgreSQL.
+
+### Coverage
+
+- Successful JSON-RPC responses: extracting the result and verifying the request URL, payload, and timeout.
+- HTTP 500 responses: rejecting unsuccessful responses with `AssertionError`, as defined by the current API wrapper implementation.
+- Transport errors: propagating `Timeout` and `ConnectionError` exceptions.
+- Missing tasks: preserving a `None` result returned by the API wrapper.
+- Service calls: verifying method names, parameters, call counts, and call order.
+
+Service tests mock the `call_api` wrapper. Tests of the wrapper itself mock `session.post`, allowing the actual request-building and response-handling logic to execute without network access.
+
+### Running Unit Tests
+
+From the project root, with dependencies installed:
+
+```bash
+python -m pytest tests/unit -v
+```
+
+No running application or database is required for these tests. Integration tests remain responsible for verifying real API behavior and data persistence in PostgreSQL.
